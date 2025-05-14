@@ -24,14 +24,9 @@ var/
 .installed.cfg
 *.egg
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
-
 # Installer logs
-debug.log
+pip-log.txt
+pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
@@ -49,26 +44,55 @@ coverage.xml
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# SageMaker/ML pipeline outputs
-model_output/
-output/
-*.pkl
-*.joblib
-*.h5
-*.csv
-*.tsv
-*.parquet
-*.log
-*.tmp
+# pyenv
+.python-version
 
-# Data files
-data/
+# mypy
+.mypy_cache/
+.dmypy.json
 
-# AWS credentials (never commit these!)
-.aws/
+# Pyre type checker
+.pyre/
 
-# VSCode
+# VS Code
 .vscode/
 
-# MacOS
-.DS_Store 
+# Mac
+.DS_Store
+
+# Model outputs and results
+results/
+model_output/
+model/
+*.joblib
+*.pkl
+*.h5
+*.ckpt
+*.onnx
+
+# SageMaker artifacts
+output/
+
+# Local data splits (keep CSVs by default, but user can override)
+# datasets/*.csv
+
+# Virtual environments
+venv/
+ml-pipeline-env/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+~*
+
+# Ignore config copies
+config_used.yaml
+
+# Ignore test predictions
+*test_predictions.csv
+
+# AWS credentials (never commit these!)
+.aws/ 
