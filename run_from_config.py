@@ -110,6 +110,14 @@ def run_from_config_main(config):
     pipeline.fit(X, y, X_val, y_val, config=config)
     print("Training complete.")
 
+    # Save leaderboard as CSV if classic pipeline
+    if pipeline_type == 'classic':
+        predictor = pipeline.pipeline.predictor  # Access the underlying TabularPredictor
+        leaderboard = predictor.leaderboard()
+        leaderboard_path = os.path.join(pipeline.output_path, 'leaderboard.csv')
+        leaderboard.to_csv(leaderboard_path, index=False)
+        print(f"Leaderboard saved to {leaderboard_path}")
+
     # Evaluate if test data available
     if X_test is not None and y_test is not None:
         evaluation = pipeline.evaluate(X_test, y_test)

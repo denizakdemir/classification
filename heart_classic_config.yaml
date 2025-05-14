@@ -1,21 +1,28 @@
-# Example configuration for running the modular pipeline
-# Recommended entry point: python main.py --config your_config.yaml
+# Example configuration for running the classic AutoGluon pipeline on heart data
+# Recommended entry point: python main.py --config heart_classic_config.yaml
 # This config will be validated for required keys and types.
 # If you misspell a key or omit a required field, you will get a clear error message.
 
-pipeline_type: modular    # Use the modular, HPO-enabled pipeline
-# For local runs, use local CSV paths.
+pipeline_type: classic    # Use the classic AutoGluon pipeline
+# For local runs, use local CSV paths. For SageMaker, use S3 paths (e.g., s3://your-bucket/path/to/train.csv)
 train_data: datasets/heart_train.csv
 validation_data: datasets/heart_val.csv
 test_data: datasets/heart_test.csv
 target_column: target
-preprocessing:
-  impute_strategy: [mean, median, knn]
-  scaling: [standard, none]
-feature_engineering:
-  add_polynomial: [True, False]
-model:
-  n_estimators: [100, 200]
+# predictors:  # Uncomment and list columns if you want to specify explicitly
+#   - age
+#   - sex
+#   - cp
+#   - trestbps
+#   - chol
+#   - fbs
+#   - restecg
+#   - thalach
+#   - exang
+#   - oldpeak
+#   - slope
+#   - ca
+#   - thal
 model_name: heart_model
 run_name: local_test
 output_path: ./results
@@ -24,9 +31,8 @@ categorical_threshold: 15
 text_threshold: 100
 random_seed: 42
 autogluon_hyperparameters:
-  RF: {}
   # Example: uncomment and customize if needed
-  GBM: {extra_trees: True, ag_args: {name_suffix: 'EXTRA'}}
+  # GBM: {extra_trees: True, ag_args: {name_suffix: 'EXTRA'}}
 save_leaderboard: true
 save_predictions: true
 save_config_copy: true

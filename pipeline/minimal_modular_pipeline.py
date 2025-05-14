@@ -152,6 +152,11 @@ if __name__ == '__main__':
     study.optimize(objective, n_trials=10)
     print('Best trial:', study.best_trial.params)
 
+    # Save leaderboard of all trials
+    df_leaderboard = study.trials_dataframe()
+    df_leaderboard.to_csv('modular_leaderboard.csv', index=False)
+    print('Leaderboard saved to modular_leaderboard.csv')
+
     # Train best pipeline
     best_trial = study.best_trial
     pipe = MinimalPipeline(config)

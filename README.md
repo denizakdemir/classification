@@ -143,6 +143,27 @@ python main.py --config your_config.yaml
 - The runner will select the correct pipeline based on `pipeline_type`.
 - Both pipelines support the same interface for training, evaluation, and saving/loading.
 
+## Example: Heart Disease Dataset
+
+This repository includes two ready-to-use config files for the heart disease dataset:
+
+- `heart_classic_config.yaml`: For the classic AutoGluon pipeline
+- `heart_config.yaml`: For the modular (Optuna/scikit-learn) pipeline
+
+### Running the Classic (AutoGluon) Pipeline
+
+```bash
+python main.py --config heart_classic_config.yaml
+```
+
+### Running the Modular (Optuna) Pipeline
+
+```bash
+python main.py --config heart_config.yaml
+```
+
+You can switch between pipelines by changing the `pipeline_type` and config structure. See the example YAML files for details.
+
 ---
 
 For more, see `pipeline_usage_guide.md` and `run_locally.md`.
