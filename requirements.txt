@@ -1,0 +1,11 @@
+pandas
+numpy
+pyyaml
+boto3
+matplotlib
+seaborn
+autogluon.tabular
+pdpbox
+shap
+sagemaker
+scikit-learn 
