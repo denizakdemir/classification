@@ -24,10 +24,12 @@ categorical_threshold: 15
 text_threshold: 100
 random_seed: 42
 autogluon_hyperparameters:
+  # RF: {}
+  # GBM: {}
   # Example: uncomment and customize if needed
   # GBM: {extra_trees: True, ag_args: {name_suffix: 'EXTRA'}}
 save_leaderboard: true
 save_predictions: true
 save_config_copy: true
-time_limit: 20
+time_limit: 100
 presets: good_quality 

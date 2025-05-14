@@ -82,16 +82,7 @@ def get_pipeline_class(pipeline_type):
     else:
         raise ValueError(f"Unknown pipeline_type: {pipeline_type}")
 
-def main(config_path):
-    # Download config if on S3
-    if config_path.startswith("s3://"):
-        local_config = "config.yaml"
-        download_from_s3(config_path, local_config)
-        config_path = local_config
-
-    with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
-
+def run_from_config_main(config):
     pipeline_type = config.get('pipeline_type', 'classic')
     PipelineClass = get_pipeline_class(pipeline_type)
 
@@ -130,8 +121,15 @@ def main(config_path):
     pipeline.save('trained_pipeline.joblib')
     print("Pipeline saved as trained_pipeline.joblib")
 
+# Keep CLI entrypoint for backward compatibility
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True, help="Path to YAML config file (local or S3)")
     args = parser.parse_args()
-    main(args.config) 
+    if args.config.startswith("s3://"):
+        local_config = "config.yaml"
+        download_from_s3(args.config, local_config)
+        args.config = local_config
+    with open(args.config, "r") as f:
+        config = yaml.safe_load(f)
+    run_from_config_main(config) 

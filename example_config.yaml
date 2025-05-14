@@ -1,5 +1,8 @@
 # Example configuration for running the classification pipeline
-# pipeline_type: classic  # Use the classic AutoGluon pipeline (default)
+# Recommended entry point: python main.py --config your_config.yaml
+# This config will be validated for required keys and types.
+# If you misspell a key or omit a required field, you will get a clear error message.
+
 pipeline_type: classic    # Use the classic AutoGluon pipeline (set to 'modular' for the modular pipeline)
 # For local runs, use local CSV paths. For SageMaker, use S3 paths (e.g., s3://your-bucket/path/to/train.csv)
 train_data: datasets/heart_train.csv

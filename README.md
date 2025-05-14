@@ -2,6 +2,41 @@
 
 A robust, configurable pipeline for tabular classification tasks, supporting missing data, feature importance, partial dependence plots, and AWS SageMaker integration. Organizes results by model/data names and tracks all key artifacts.
 
+## Quickstart
+
+1. Clone the repository and install dependencies:
+   ```bash
+   git clone <your-repo-url>
+   cd <your-repo-directory>
+   pip install -r requirements.txt
+   ```
+2. Prepare your data and config (see `example_config.yaml`).
+3. Run the pipeline:
+   ```bash
+   python main.py --config your_config.yaml
+   ```
+   - The runner will auto-detect the pipeline type and validate your config.
+   - Results and models are saved to the output directory specified in your config.
+
+## Features Table
+
+| Area                | Improvement                                      |
+|---------------------|-------------------------------------------------|
+| Entry Point         | Unified `main.py` or CLI                        |
+| Error Handling      | Config validation, clear errors                  |
+| Installation        | `requirements.txt`, `Makefile` (optional)        |
+| Documentation       | Quickstart, examples, comments                   |
+| CLI                 | Helpful flags, print config at start             |
+| Packaging           | Proper package, relative imports                 |
+| Output              | Structured results, auto-create dirs             |
+| Testing             | Add `tests/`, unit tests (see roadmap)           |
+| Extensibility       | Easy to add new models/steps                     |
+| User Experience     | Progress bars, result summary                    |
+| Notebook            | Jupyter example (see `notebooks/`)               |
+| Config              | Minimal configs, warn on typos                   |
+| Deployment          | Add deployment guide (see `sagemaker_deployment.py`) |
+| Web UI (optional)   | Streamlit/Gradio interface (see roadmap)         |
+
 ## Features
 - Automated missing data handling
 - Probabilistic and class predictions
@@ -10,19 +45,16 @@ A robust, configurable pipeline for tabular classification tasks, supporting mis
 - Organized output directories by model/data names
 - SageMaker-ready
 
-## Setup
-```bash
-pip install -r requirements.txt
-```
-
 ## Usage
 1. Prepare your data CSV(s) and a config YAML (see `example_config.yaml`).
 2. Run:
-```bash
-python run_from_config.py --config s3://your-bucket/path/to/config.yaml
-# or for a local config:
-python run_from_config.py --config ./example_config.yaml
-```
+   ```bash
+   python main.py --config your_config.yaml
+   ```
+   - Or, for backward compatibility:
+   ```bash
+   python run_from_config.py --config your_config.yaml
+   ```
 
 ## Configuration File
 See `example_config.yaml` for all supported options. Example:
@@ -63,7 +95,7 @@ presets: best_quality
 All these parameters are passed to the pipeline and affect feature detection, reproducibility, and model training.
 
 ## Output Organization
-Results are saved under:
+Results are saved under the output directory specified in your config, organized by model and run name.
 
 ## Unified Pipeline Interface and Config
 
@@ -105,7 +137,7 @@ model:
 ### Unified Usage Example
 
 ```bash
-python run_from_config.py --config your_config.yaml
+python main.py --config your_config.yaml
 ```
 
 - The runner will select the correct pipeline based on `pipeline_type`.
@@ -113,6 +145,4 @@ python run_from_config.py --config your_config.yaml
 
 ---
 
-**Choose the pipeline that best fits your needs:**
-- Use the classic pipeline for full AutoGluon support, SageMaker integration, and feature importance/explainability.
-- Use the modular pipeline for research, rapid prototyping, or custom HPO across all pipeline stages.
+For more, see `pipeline_usage_guide.md` and `run_locally.md`.
