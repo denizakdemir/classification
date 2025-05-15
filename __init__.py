@@ -1,1 +1,1 @@
- 
+from pipeline.pipeline import ClassificationPipeline 
