@@ -96,3 +96,4 @@ config_used.yaml
 
 # AWS credentials (never commit these!)
 .aws/ 
+**/.claude/settings.local.json
