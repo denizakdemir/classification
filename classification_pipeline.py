@@ -12,12 +12,15 @@ import time
 import pickle
 import logging
 import argparse
+import yaml
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Dict, List, Tuple, Union, Optional, Any
 from pathlib import Path
+from sklearn.preprocessing import OneHotEncoder, PolynomialFeatures
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 # AutoGluon and AWS-specific imports
 import autogluon
@@ -98,33 +101,44 @@ class MissingDataHandler:
 class FeatureEngineering:
     """Handles feature engineering processes."""
     
-    def __init__(self, categorical_threshold: int = 15, text_threshold: int = 100):
+    def __init__(self, categorical_threshold: int = 15, text_threshold: int = 100,
+                 use_onehot: bool = False, use_tfidf: bool = False, use_poly: bool = False):
         self.categorical_features = []
         self.numeric_features = []
         self.text_features = []
         self.date_features = []
         self.categorical_threshold = categorical_threshold
         self.text_threshold = text_threshold
+        self.types_set = False  # Track if types have been set from training
+        self.use_onehot = use_onehot
+        self.use_tfidf = use_tfidf
+        self.use_poly = use_poly
+        self.onehot_encoder = None
+        self.tfidf_vectorizers = {}
+        self.poly_transformer = None
+        logger.info(f"FeatureEngineering: onehot={use_onehot}, tfidf={use_tfidf}, poly={use_poly}")
     
     def identify_feature_types(self, df: pd.DataFrame) -> Dict[str, List[str]]:
-        """Identify feature types in the dataframe."""
-        self.categorical_features = []
-        self.numeric_features = []
-        self.text_features = []
-        self.date_features = []
-        for col in df.columns:
-            if pd.api.types.is_numeric_dtype(df[col]):
-                if df[col].nunique() < self.categorical_threshold and df[col].nunique() / len(df) < 0.05:
-                    self.categorical_features.append(col)
-                else:
-                    self.numeric_features.append(col)
-            elif pd.api.types.is_categorical_dtype(df[col]) or pd.api.types.is_object_dtype(df[col]):
-                if df[col].nunique() < self.text_threshold:  # threshold for categorical
-                    self.categorical_features.append(col)
-                else:
-                    self.text_features.append(col)
-            elif pd.api.types.is_datetime64_dtype(df[col]):
-                self.date_features.append(col)
+        """Identify feature types in the dataframe. Only set if not already set."""
+        if not self.types_set:
+            self.categorical_features = []
+            self.numeric_features = []
+            self.text_features = []
+            self.date_features = []
+            for col in df.columns:
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    if df[col].nunique() < self.categorical_threshold and df[col].nunique() / len(df) < 0.05:
+                        self.categorical_features.append(col)
+                    else:
+                        self.numeric_features.append(col)
+                elif pd.api.types.is_categorical_dtype(df[col]) or pd.api.types.is_object_dtype(df[col]):
+                    if df[col].nunique() < self.text_threshold:  # threshold for categorical
+                        self.categorical_features.append(col)
+                    else:
+                        self.text_features.append(col)
+                elif pd.api.types.is_datetime64_dtype(df[col]):
+                    self.date_features.append(col)
+            self.types_set = True
         feature_types = {
             'categorical_features': self.categorical_features,
             'numeric_features': self.numeric_features,
@@ -132,6 +146,23 @@ class FeatureEngineering:
             'date_features': self.date_features
         }
         return feature_types
+    
+    def set_feature_types(self, feature_types: Dict[str, list]):
+        """Set feature types from a dictionary (for inference)."""
+        self.categorical_features = feature_types.get('categorical_features', [])
+        self.numeric_features = feature_types.get('numeric_features', [])
+        self.text_features = feature_types.get('text_features', [])
+        self.date_features = feature_types.get('date_features', [])
+        self.types_set = True
+    
+    def get_feature_types(self) -> Dict[str, list]:
+        """Get current feature types as a dictionary."""
+        return {
+            'categorical_features': self.categorical_features,
+            'numeric_features': self.numeric_features,
+            'text_features': self.text_features,
+            'date_features': self.date_features
+        }
     
     def create_date_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Extract features from date columns."""
@@ -148,6 +179,95 @@ class FeatureEngineering:
             df_processed.drop(columns=[col], inplace=True)
         
         return df_processed
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply all enabled feature engineering steps (fit on training data)."""
+        logger.info(f"[FeatureEngineering] Starting fit_transform. Input shape: {df.shape}")
+        start_time = time.time()
+        df_out = df.copy()
+        # One-hot encoding
+        if self.use_onehot and self.categorical_features:
+            try:
+                self.onehot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+                onehot = self.onehot_encoder.fit_transform(df_out[self.categorical_features])
+                onehot_df = pd.DataFrame(onehot, columns=self.onehot_encoder.get_feature_names_out(self.categorical_features), index=df_out.index)
+                df_out = df_out.drop(columns=self.categorical_features)
+                df_out = pd.concat([df_out, onehot_df], axis=1)
+                logger.info(f"Applied one-hot encoding to: {self.categorical_features}")
+            except Exception as e:
+                logger.error(f"Error in one-hot encoding: {e}")
+                raise
+        # TF-IDF for text features
+        if self.use_tfidf and self.text_features:
+            for col in self.text_features:
+                try:
+                    vect = TfidfVectorizer(max_features=20)
+                    tfidf = vect.fit_transform(df_out[col].fillna("").astype(str))
+                    tfidf_df = pd.DataFrame(tfidf.toarray(), columns=[f"{col}_tfidf_{i}" for i in range(tfidf.shape[1])], index=df_out.index)
+                    df_out = df_out.drop(columns=[col])
+                    df_out = pd.concat([df_out, tfidf_df], axis=1)
+                    self.tfidf_vectorizers[col] = vect
+                    logger.info(f"Applied TF-IDF to: {col}")
+                except Exception as e:
+                    logger.error(f"Error in TF-IDF for {col}: {e}")
+                    raise
+        # Polynomial features
+        if self.use_poly and self.numeric_features:
+            try:
+                self.poly_transformer = PolynomialFeatures(degree=2, include_bias=False)
+                poly = self.poly_transformer.fit_transform(df_out[self.numeric_features])
+                poly_cols = self.poly_transformer.get_feature_names_out(self.numeric_features)
+                poly_df = pd.DataFrame(poly, columns=poly_cols, index=df_out.index)
+                df_out = df_out.drop(columns=self.numeric_features)
+                df_out = pd.concat([df_out, poly_df], axis=1)
+                logger.info(f"Applied polynomial features to: {self.numeric_features}")
+            except Exception as e:
+                logger.error(f"Error in polynomial features: {e}")
+                raise
+        logger.info(f"[FeatureEngineering] fit_transform complete. Output shape: {df_out.shape}. Time: {time.time() - start_time:.2f}s")
+        return df_out
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply all enabled feature engineering steps (use fit params from training)."""
+        logger.info(f"[FeatureEngineering] Starting transform. Input shape: {df.shape}")
+        start_time = time.time()
+        df_out = df.copy()
+        # One-hot encoding
+        if self.use_onehot and self.categorical_features and self.onehot_encoder is not None:
+            try:
+                onehot = self.onehot_encoder.transform(df_out[self.categorical_features])
+                onehot_df = pd.DataFrame(onehot, columns=self.onehot_encoder.get_feature_names_out(self.categorical_features), index=df_out.index)
+                df_out = df_out.drop(columns=self.categorical_features)
+                df_out = pd.concat([df_out, onehot_df], axis=1)
+            except Exception as e:
+                logger.error(f"Error in one-hot encoding (transform): {e}")
+                raise
+        # TF-IDF for text features
+        if self.use_tfidf and self.text_features:
+            for col in self.text_features:
+                vect = self.tfidf_vectorizers.get(col)
+                if vect is not None:
+                    try:
+                        tfidf = vect.transform(df_out[col].fillna("").astype(str))
+                        tfidf_df = pd.DataFrame(tfidf.toarray(), columns=[f"{col}_tfidf_{i}" for i in range(tfidf.shape[1])], index=df_out.index)
+                        df_out = df_out.drop(columns=[col])
+                        df_out = pd.concat([df_out, tfidf_df], axis=1)
+                    except Exception as e:
+                        logger.error(f"Error in TF-IDF (transform) for {col}: {e}")
+                        raise
+        # Polynomial features
+        if self.use_poly and self.numeric_features and self.poly_transformer is not None:
+            try:
+                poly = self.poly_transformer.transform(df_out[self.numeric_features])
+                poly_cols = self.poly_transformer.get_feature_names_out(self.numeric_features)
+                poly_df = pd.DataFrame(poly, columns=poly_cols, index=df_out.index)
+                df_out = df_out.drop(columns=self.numeric_features)
+                df_out = pd.concat([df_out, poly_df], axis=1)
+            except Exception as e:
+                logger.error(f"Error in polynomial features (transform): {e}")
+                raise
+        logger.info(f"[FeatureEngineering] transform complete. Output shape: {df_out.shape}. Time: {time.time() - start_time:.2f}s")
+        return df_out
 
 
 class ModelFeatureImportance:
@@ -281,45 +401,58 @@ class PartialDependenceAnalyzer:
 class ClassificationPipeline:
     """End-to-end classification pipeline with missing value handling and model interpretation."""
     
-    def __init__(self, output_path: str = '/opt/ml/model', categorical_threshold: int = 15, text_threshold: int = 100):
-        """
-        Args:
-            output_path: Directory to save model artifacts
-            categorical_threshold: Max unique values for categorical
-            text_threshold: Min unique values for text
-        """
+    def __init__(self, output_path: str = '/opt/ml/model', missing_threshold: float = 0.75, categorical_threshold: int = 15, text_threshold: int = 100,
+                 use_onehot: bool = False, use_tfidf: bool = False, use_poly: bool = False):
         self.output_path = output_path
-        self.missing_handler = MissingDataHandler()
-        self.feature_engineering = FeatureEngineering(categorical_threshold=categorical_threshold, text_threshold=text_threshold)
+        self.missing_handler = MissingDataHandler(threshold=missing_threshold)
+        self.feature_engineering = FeatureEngineering(
+            categorical_threshold=categorical_threshold,
+            text_threshold=text_threshold,
+            use_onehot=use_onehot,
+            use_tfidf=use_tfidf,
+            use_poly=use_poly
+        )
         self.predictor = None
         self.feature_importance = None
         self.pdp_analyzer = None
+        self.is_trained = False
+        self.feature_types = None
+        logger.info(f"Pipeline thresholds: missing={missing_threshold}, categorical={categorical_threshold}, text={text_threshold}, onehot={use_onehot}, tfidf={use_tfidf}, poly={use_poly}")
         
-    def preprocess(self, df: pd.DataFrame, target_column: Optional[str] = None) -> pd.DataFrame:
-        """Preprocess data with missing value handling and feature engineering."""
-        # Analyze missing patterns
+    def preprocess(self, df: pd.DataFrame, target_column: Optional[str] = None, is_training: bool = False) -> pd.DataFrame:
+        """Preprocess data with missing value handling and feature engineering. Use training types if not training."""
+        logger.info(f"[Pipeline] Preprocessing started. is_training={is_training}, input shape={df.shape}")
+        start_time = time.time()
+        # Analyze missing patterns (always recompute for current df)
         missing_analysis = self.missing_handler.analyze_missing(df)
         logger.info(f"Missing data analysis: {len(missing_analysis['cols_to_drop'])} columns with excessive missingness")
-        
         # Handle missing values
         df_processed = self.missing_handler.handle_missing(df)
-        
-        # Identify feature types
-        feature_types = self.feature_engineering.identify_feature_types(df_processed)
-        logger.info(f"Feature types: {feature_types}")
-        
+        # Feature type handling
+        if is_training or not self.feature_engineering.types_set:
+            feature_types = self.feature_engineering.identify_feature_types(df_processed)
+            self.feature_types = feature_types
+        else:
+            self.feature_engineering.set_feature_types(self.feature_types)
+        logger.info(f"Feature types: {self.feature_engineering.get_feature_types()}")
         # Create date features if any
         if self.feature_engineering.date_features:
             df_processed = self.feature_engineering.create_date_features(df_processed)
-        
-        # Save preprocessing components
-        os.makedirs(self.output_path, exist_ok=True)
-        with open(os.path.join(self.output_path, 'missing_handler.pkl'), 'wb') as f:
-            pickle.dump(self.missing_handler, f)
-        
-        with open(os.path.join(self.output_path, 'feature_engineering.pkl'), 'wb') as f:
-            pickle.dump(self.feature_engineering, f)
-            
+        # Feature engineering steps
+        if is_training:
+            df_processed = self.feature_engineering.fit_transform(df_processed)
+        else:
+            df_processed = self.feature_engineering.transform(df_processed)
+        # Save preprocessing components only during training
+        if is_training:
+            os.makedirs(self.output_path, exist_ok=True)
+            with open(os.path.join(self.output_path, 'missing_handler.pkl'), 'wb') as f:
+                pickle.dump(self.missing_handler, f)
+            with open(os.path.join(self.output_path, 'feature_engineering.pkl'), 'wb') as f:
+                pickle.dump(self.feature_engineering, f)
+            with open(os.path.join(self.output_path, 'feature_types.pkl'), 'wb') as f:
+                pickle.dump(self.feature_types, f)
+        logger.info(f"[Pipeline] Preprocessing complete. Output shape: {df_processed.shape}. Time: {time.time() - start_time:.2f}s")
         return df_processed
     
     def train(self, 
@@ -329,25 +462,20 @@ class ClassificationPipeline:
               time_limit: int = 3600,
               presets: str = 'best_quality',
               hyperparameters: Optional[Any] = 'multimodal') -> TabularPredictor:
-        """Train the classification model."""
-        # Separate out label column
+        """Train the classification model. Logs data shapes and training time."""
+        logger.info(f"[Pipeline] Training started. Train data shape: {train_data.shape}")
+        start_time = time.time()
         y_train = train_data[target_column]
         X_train = train_data.drop(columns=[target_column])
-        
-        # Preprocess data
-        X_train_processed = self.preprocess(X_train)
+        X_train_processed = self.preprocess(X_train, is_training=True)
         train_processed = X_train_processed.copy()
         train_processed[target_column] = y_train
-        
-        # Set up AutoGluon predictor
         predictor = TabularPredictor(
             label=target_column,
             path=os.path.join(self.output_path, 'model'),
             problem_type='binary' if len(y_train.unique()) <= 2 else 'multiclass',
             eval_metric='roc_auc' if len(y_train.unique()) <= 2 else 'accuracy'
         )
-        
-        # Train the model
         predictor.fit(
             train_data=train_processed,
             tuning_data=eval_data if eval_data is not None else None,
@@ -358,61 +486,75 @@ class ClassificationPipeline:
             verbosity=2,
             use_bag_holdout=True if eval_data is not None else False
         )
-        
         self.predictor = predictor
+        self.is_trained = True
         logger.info(f"Model training completed. Leaderboard: {predictor.leaderboard()}")
-        
+        logger.info(f"[Pipeline] Training complete. Time: {time.time() - start_time:.2f}s")
         return predictor
     
+    def _load_preprocessing_objects(self):
+        """Load preprocessing objects if not already loaded."""
+        if self.missing_handler is None:
+            try:
+                with open(os.path.join(self.output_path, 'missing_handler.pkl'), 'rb') as f:
+                    self.missing_handler = pickle.load(f)
+                logger.info("Loaded missing_handler from disk.")
+            except Exception as e:
+                logger.error(f"Could not load missing_handler: {e}")
+                raise
+        if self.feature_engineering is None:
+            try:
+                with open(os.path.join(self.output_path, 'feature_engineering.pkl'), 'rb') as f:
+                    self.feature_engineering = pickle.load(f)
+                logger.info("Loaded feature_engineering from disk.")
+            except Exception as e:
+                logger.error(f"Could not load feature_engineering: {e}")
+                raise
+        if self.feature_types is None:
+            try:
+                with open(os.path.join(self.output_path, 'feature_types.pkl'), 'rb') as f:
+                    self.feature_types = pickle.load(f)
+                logger.info("Loaded feature_types from disk.")
+            except Exception as e:
+                logger.error(f"Could not load feature_types: {e}")
+                raise
+
     def evaluate(self, test_data: pd.DataFrame, target_column: str) -> Dict:
-        """Evaluate model performance."""
         if self.predictor is None:
             raise ValueError("Model not trained. Call train() method first.")
-        
-        # Separate features and target
         y_test = test_data[target_column]
         X_test = test_data.drop(columns=[target_column])
-        
-        # Preprocess data
-        X_test_processed = self.preprocess(X_test)
+        # Load preprocessing objects if not set
+        if self.missing_handler is None or self.feature_engineering is None or self.feature_types is None:
+            self._load_preprocessing_objects()
+        X_test_processed = self.preprocess(X_test, is_training=False)
         test_processed = X_test_processed.copy()
         test_processed[target_column] = y_test
-        
-        # Evaluate model
         performance = self.predictor.evaluate(test_processed)
         logger.info(f"Model evaluation: {performance}")
-        
         # Calculate probabilities
-        proba_preds = self.predictor.predict_proba(X_test_processed)
-        
-        # Calculate feature importance
         self.feature_importance = ModelFeatureImportance(
             model_path=os.path.join(self.output_path, 'model'),
             missing_handler=self.missing_handler
         )
-        importance = self.feature_importance.calculate_importance(X_test_processed)
+        # Pass test_processed (with label) to feature_importance
+        importance = self.feature_importance.calculate_importance(test_processed)
         combined_importance = self.feature_importance.combine_missing_importance()
-        
         # Generate partial dependence plots for top features
         self.pdp_analyzer = PartialDependenceAnalyzer(
             model_path=os.path.join(self.output_path, 'model'),
             feature_engineering=self.feature_engineering
         )
-        
         top_features = combined_importance['feature'].head(10).tolist()
         pdp_results = self.pdp_analyzer.generate_pdp(X_test_processed, top_features)
-        
         # Save importance and pdp results
         combined_importance.to_csv(os.path.join(self.output_path, 'feature_importance.csv'), index=False)
-        
         # Save PDPs as plots
         pdp_dir = os.path.join(self.output_path, 'pdp_plots')
         os.makedirs(pdp_dir, exist_ok=True)
-        
         for feature, pdp_data in pdp_results.items():
             if 'figure' in pdp_data:
                 pdp_data['figure'].savefig(os.path.join(pdp_dir, f"pdp_{feature}.png"))
-        
         return {
             'performance': performance,
             'feature_importance': combined_importance,
@@ -420,51 +562,43 @@ class ClassificationPipeline:
         }
         
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Make predictions with probabilities for each class."""
         if self.predictor is None:
             try:
                 self.predictor = TabularPredictor.load(os.path.join(self.output_path, 'model'))
-                with open(os.path.join(self.output_path, 'missing_handler.pkl'), 'rb') as f:
-                    self.missing_handler = pickle.load(f)
-                with open(os.path.join(self.output_path, 'feature_engineering.pkl'), 'rb') as f:
-                    self.feature_engineering = pickle.load(f)
+                logger.info("Loaded predictor from disk.")
             except Exception as e:
+                logger.error(f"Could not load model: {e}")
                 raise ValueError(f"Could not load model: {str(e)}")
-        
-        # Preprocess the input data
-        df_processed = self.preprocess(df)
-        
-        # Generate predictions
+        # Load preprocessing objects if not set
+        if self.missing_handler is None or self.feature_engineering is None or self.feature_types is None:
+            self._load_preprocessing_objects()
+        df_processed = self.preprocess(df, is_training=False)
         predictions = self.predictor.predict(df_processed)
         probabilities = self.predictor.predict_proba(df_processed)
-        
-        # Combine results
         results = pd.DataFrame(probabilities)
         results['prediction'] = predictions
-        
         return results
     
     def explain_prediction(self, df: pd.DataFrame) -> Dict:
-        """Generate explanation for predictions using SHAP values."""
         if self.predictor is None:
             try:
                 self.predictor = TabularPredictor.load(os.path.join(self.output_path, 'model'))
+                logger.info("Loaded predictor from disk.")
             except Exception as e:
+                logger.error(f"Could not load model: {e}")
                 raise ValueError(f"Could not load model: {str(e)}")
-        
-        # Preprocess data
-        df_processed = self.preprocess(df)
-        
+        # Load preprocessing objects if not set
+        if self.missing_handler is None or self.feature_engineering is None or self.feature_types is None:
+            self._load_preprocessing_objects()
+        df_processed = self.preprocess(df, is_training=False)
         # Get best model for explanation
-        model = self.predictor.get_model_best()
-        
+        model_name = self.predictor.get_model_best()
+        model = self.predictor._trainer.load_model(model_name)
         # Initialize explainer
         explainer = shap.Explainer(model.predict, df_processed)
         shap_values = explainer(df_processed)
-        
         # Get predictions
         predictions = self.predictor.predict(df_processed)
-        
         # Combine into explanation
         explanations = []
         for i in range(len(df)):
@@ -474,7 +608,6 @@ class ClassificationPipeline:
                 'features': df_processed.columns.tolist()
             }
             explanations.append(explanation)
-        
         return {
             'explanations': explanations,
             'base_value': shap_values[0].base_values
@@ -499,11 +632,41 @@ class SagemakerEntrypoint:
         parser.add_argument('--validation', type=str, default=os.environ.get('SM_CHANNEL_VALIDATION', '/opt/ml/input/data/validation'))
         parser.add_argument('--test', type=str, default=os.environ.get('SM_CHANNEL_TEST', '/opt/ml/input/data/test'))
         parser.add_argument('--target-column', type=str, required=True)
+        parser.add_argument('--missing-threshold', type=float, default=None, help='Max fraction of missing values allowed in a column (0-1)')
+        parser.add_argument('--categorical-threshold', type=int, default=None, help='Max unique values for categorical features')
+        parser.add_argument('--text-threshold', type=int, default=None, help='Min unique values for text features')
+        parser.add_argument('--config', type=str, default=None, help='Path to YAML config file')
+        parser.add_argument('--use-onehot', action='store_true', help='Enable one-hot encoding for categorical features')
+        parser.add_argument('--use-tfidf', action='store_true', help='Enable TF-IDF vectorization for text features')
+        parser.add_argument('--use-poly', action='store_true', help='Enable polynomial features for numeric features')
         
         args, _ = parser.parse_known_args()
         
+        # Load config file if provided
+        config = {}
+        if args.config:
+            with open(args.config, 'r') as f:
+                config = yaml.safe_load(f)
+            logger.info(f"Loaded config from {args.config}: {config}")
+        # Determine thresholds (CLI overrides config, which overrides default)
+        missing_threshold = args.missing_threshold if args.missing_threshold is not None else config.get('missing_threshold', 0.75)
+        categorical_threshold = args.categorical_threshold if args.categorical_threshold is not None else config.get('categorical_threshold', 15)
+        text_threshold = args.text_threshold if args.text_threshold is not None else config.get('text_threshold', 100)
+        use_onehot = args.use_onehot if 'use_onehot' in args else config.get('use_onehot', False)
+        use_tfidf = args.use_tfidf if 'use_tfidf' in args else config.get('use_tfidf', False)
+        use_poly = args.use_poly if 'use_poly' in args else config.get('use_poly', False)
+        logger.info(f"Final thresholds: missing={missing_threshold}, categorical={categorical_threshold}, text={text_threshold}")
+        
         # Initialize pipeline
-        pipeline = ClassificationPipeline(output_path=args.model_dir)
+        pipeline = ClassificationPipeline(
+            output_path=args.model_dir,
+            missing_threshold=missing_threshold,
+            categorical_threshold=categorical_threshold,
+            text_threshold=text_threshold,
+            use_onehot=use_onehot,
+            use_tfidf=use_tfidf,
+            use_poly=use_poly
+        )
         
         # Load data
         train_data = pd.read_csv(os.path.join(args.train, 'train.csv'))

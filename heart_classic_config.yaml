@@ -29,8 +29,12 @@ output_path: ./results
 missingness_threshold: 0.75
 categorical_threshold: 15
 text_threshold: 100
+use_onehot: false  # Set to true to enable one-hot encoding for categorical features
+use_tfidf: false   # Set to true to enable TF-IDF vectorization for text features
+use_poly: false    # Set to true to enable polynomial features for numeric features
 random_seed: 42
 autogluon_hyperparameters:
+  RF: {n_estimators: 100}
   # Example: uncomment and customize if needed
   # GBM: {extra_trees: True, ag_args: {name_suffix: 'EXTRA'}}
 save_leaderboard: true
