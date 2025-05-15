@@ -144,6 +144,9 @@ The pipeline supports the following configuration parameters (see `example_confi
 - `missingness_threshold`: Max allowed missing fraction per column (default 0.75)
 - `categorical_threshold`: Max unique values for a column to be considered categorical (default 15)
 - `text_threshold`: Min unique values for a column to be considered text (default 100)
+- `use_onehot`: Enable one-hot encoding for categorical features (default false)
+- `use_tfidf`: Enable TF-IDF vectorization for text features (default false)
+- `use_poly`: Enable polynomial features for numeric features (default false)
 - `random_seed`: Random seed for reproducibility (numpy, random, torch)
 - `autogluon_hyperparameters`: Custom hyperparameters for AutoGluon TabularPredictor.fit (optional)
 - `save_leaderboard`, `save_predictions`, `save_config_copy`: Output toggles
@@ -152,12 +155,26 @@ The pipeline supports the following configuration parameters (see `example_confi
 Example config snippet:
 
 ```yaml
+pipeline_type: classic
+train_data: datasets/heart_train.csv
+validation_data: datasets/heart_val.csv
+test_data: datasets/heart_test.csv
+target_column: target
+output_path: ./results
 missingness_threshold: 0.75
 categorical_threshold: 15
 text_threshold: 100
+use_onehot: false  # Set to true to enable one-hot encoding for categorical features
+use_tfidf: false   # Set to true to enable TF-IDF vectorization for text features
+use_poly: false    # Set to true to enable polynomial features for numeric features
 random_seed: 42
 autogluon_hyperparameters:
-  # GBM: {extra_trees: True, ag_args: {name_suffix: 'EXTRA'}}
+  RF: {n_estimators: 100}
+save_leaderboard: true
+save_predictions: true
+save_config_copy: true
+time_limit: 60
+presets: good_quality
 ```
 
 ### How these affect the pipeline
@@ -165,6 +182,24 @@ autogluon_hyperparameters:
 - `categorical_threshold`/`text_threshold`: Control how features are classified as categorical or text.
 - `random_seed`: Ensures reproducibility for numpy, random, and torch.
 - `autogluon_hyperparameters`: Passed directly to AutoGluon for model customization.
+
+## Running Tests
+To run all tests (unit, integration, edge cases):
+```bash
+PYTHONPATH=. pytest -v tests/
+```
+If you use NumPy >=1.24, the test suite includes a monkey-patch for `np.bool` and `np.int` to ensure compatibility with SHAP and other libraries.
+
+## Troubleshooting
+- **NumPy/SHAP errors:** If you see errors about `np.bool` or `np.int`, ensure your test file includes:
+  ```python
+  import numpy as np
+  if not hasattr(np, 'bool'):
+      np.bool = np.bool_
+  if not hasattr(np, 'int'):
+      np.int = int
+  ```
+- **Ray errors:** The test suite uses only non-parallel models (`RF`, `XT`, `KNN`) to avoid Ray dependency.
 
 ## Advanced Configuration
 
@@ -225,21 +260,6 @@ random.seed(42)
 3. **Examine Feature Importance**: Pay attention to both original features and their missingness
 4. **Review PDPs**: Use partial dependence plots to understand feature effects
 5. **Enough Training Time**: For complex datasets, provide adequate training time (1+ hours)
-
-## Troubleshooting
-
-### Common Issues
-
-- **Memory Errors**: Use a larger instance type if you see memory errors
-- **Long Training Times**: Use faster presets or reduce time_limit for quicker iterations
-- **Poor Performance**: Check for data leakage or ensure features are properly extracted
-
-### Getting Help
-
-If you encounter issues, check:
-- AutoGluon documentation: https://auto.gluon.ai/stable/index.html
-- AWS SageMaker documentation: https://docs.aws.amazon.com/sagemaker/
-- File an issue in your project repository
 
 ## Advanced Usage Examples
 

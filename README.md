@@ -44,6 +44,7 @@ A robust, configurable pipeline for tabular classification tasks, supporting mis
 - Configurable via YAML (local or S3)
 - Organized output directories by model/data names
 - SageMaker-ready
+- **Modular feature engineering**: Enable one-hot encoding, TF-IDF, or polynomial features via config toggles
 
 ## Usage
 1. Prepare your data CSV(s) and a config YAML (see `example_config.yaml`).
@@ -59,30 +60,26 @@ A robust, configurable pipeline for tabular classification tasks, supporting mis
 ## Configuration File
 See `example_config.yaml` for all supported options. Example:
 ```yaml
-train_data: s3://your-bucket/path/to/train.csv
-validation_data: s3://your-bucket/path/to/validation.csv  # optional
-test_data: s3://your-bucket/path/to/test.csv  # optional
+pipeline_type: classic
+train_data: datasets/heart_train.csv
+validation_data: datasets/heart_val.csv
+test_data: datasets/heart_test.csv
 target_column: target
-predictors:
-  - age
-  - gender
-  - cholesterol
-  - blood_pressure
-model_name: my_model
-run_name: experiment1
-output_path: ./results  # base directory for outputs
-missingness_threshold: 0.75  # Max allowed missing fraction per column (default 0.75)
-categorical_threshold: 15    # Max unique values for a column to be considered categorical (default 15)
-text_threshold: 100          # Min unique values for a column to be considered text (default 100)
-random_seed: 42              # Random seed for reproducibility (numpy, random, torch)
-autogluon_hyperparameters:   # Custom hyperparameters for AutoGluon TabularPredictor.fit (optional)
-  # Example:
-  # GBM: {extra_trees: True, ag_args: {name_suffix: 'EXTRA'}}
+output_path: ./results
+missingness_threshold: 0.75
+categorical_threshold: 15
+text_threshold: 100
+use_onehot: false  # Set to true to enable one-hot encoding for categorical features
+use_tfidf: false   # Set to true to enable TF-IDF vectorization for text features
+use_poly: false    # Set to true to enable polynomial features for numeric features
+random_seed: 42
+autogluon_hyperparameters:
+  RF: {n_estimators: 100}
 save_leaderboard: true
 save_predictions: true
 save_config_copy: true
-time_limit: 3600
-presets: best_quality
+time_limit: 60
+presets: good_quality
 ```
 
 ### Parameter Descriptions
@@ -91,6 +88,9 @@ presets: best_quality
 - `text_threshold`: Min unique values for a column to be considered text (default 100).
 - `random_seed`: Sets the random seed for numpy, random, and torch for reproducibility.
 - `autogluon_hyperparameters`: Dictionary of custom hyperparameters passed to AutoGluon TabularPredictor.fit (see AutoGluon docs for options).
+- `use_onehot`: Enable one-hot encoding for categorical features (default false)
+- `use_tfidf`: Enable TF-IDF vectorization for text features (default false)
+- `use_poly`: Enable polynomial features for numeric features (default false)
 
 All these parameters are passed to the pipeline and affect feature detection, reproducibility, and model training.
 
@@ -163,6 +163,24 @@ python main.py --config heart_config.yaml
 ```
 
 You can switch between pipelines by changing the `pipeline_type` and config structure. See the example YAML files for details.
+
+## Running Tests
+To run all tests (unit, integration, edge cases):
+```bash
+PYTHONPATH=. pytest -v tests/
+```
+If you use NumPy >=1.24, the test suite includes a monkey-patch for `np.bool` and `np.int` to ensure compatibility with SHAP and other libraries.
+
+## Troubleshooting
+- **NumPy/SHAP errors:** If you see errors about `np.bool` or `np.int`, ensure your test file includes:
+  ```python
+  import numpy as np
+  if not hasattr(np, 'bool'):
+      np.bool = np.bool_
+  if not hasattr(np, 'int'):
+      np.int = int
+  ```
+- **Ray errors:** The test suite uses only non-parallel models (`RF`, `XT`, `KNN`) to avoid Ray dependency.
 
 ---
 
