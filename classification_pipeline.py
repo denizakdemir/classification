@@ -610,7 +610,8 @@ class ClassificationPipeline:
             explanations.append(explanation)
         return {
             'explanations': explanations,
-            'base_value': shap_values[0].base_values
+            'base_value': shap_values[0].base_values,
+            'explainer': explainer
         }
 
 

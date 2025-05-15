@@ -5,6 +5,7 @@ from classification_pipeline import MissingDataHandler, FeatureEngineering, Clas
 from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
 
+# Monkey-patch for SHAP/NumPy compatibility
 if not hasattr(np, 'bool'):
     np.bool = np.bool_
 if not hasattr(np, 'int'):
@@ -147,4 +148,24 @@ def test_only_text():
     pipeline = ClassificationPipeline(output_path='./test_model_output', use_tfidf=True, text_threshold=1)
     pipeline.train(train_data=df, target_column='target', time_limit=5, presets='good_quality', hyperparameters={"RF": {}, "XT": {}, "KNN": {}})
     preds = pipeline.predict(df.drop(columns=['target']))
-    assert len(preds) == 3 
+    assert len(preds) == 3
+
+def test_explain_prediction():
+    X, y = make_classification(n_samples=50, n_features=4, n_informative=2, random_state=42)
+    df = pd.DataFrame(X, columns=[f'f{i}' for i in range(4)])
+    df['target'] = y
+    train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
+    pipeline = ClassificationPipeline(output_path='./test_model_output')
+    pipeline.train(train_data=train_df, target_column='target', time_limit=10, presets='good_quality', hyperparameters={"RF": {}, "XT": {}, "KNN": {}})
+    sample = test_df.drop(columns=['target']).iloc[:3]
+    explanations = pipeline.explain_prediction(sample)
+    assert 'explanations' in explanations
+    assert isinstance(explanations['explanations'], list)
+    assert len(explanations['explanations']) == 3
+    for exp in explanations['explanations']:
+        assert 'prediction' in exp
+        assert 'shap_values' in exp
+        assert 'features' in exp
+        assert isinstance(exp['shap_values'], list)
+        assert isinstance(exp['features'], list)
+        assert len(exp['shap_values']) == len(exp['features']) 
