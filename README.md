@@ -40,11 +40,16 @@ A robust, configurable pipeline for tabular classification tasks, supporting mis
 ## Features
 - Automated missing data handling
 - Probabilistic and class predictions
-- Feature importance and partial dependence analysis
+- Feature importance and SHAP-based effect analysis
 - Configurable via YAML (local or S3)
 - Organized output directories by model/data names
 - SageMaker-ready
 - **Modular feature engineering**: Enable one-hot encoding, TF-IDF, or polynomial features via config toggles
+- Modular pipeline code is now split into:
+  - `pipeline/pipeline.py`: Main pipeline orchestration
+  - `pipeline/missing_data.py`, `pipeline/feature_engineering.py`, `pipeline/interpretation.py`, etc.: Modular components
+- SHAP-based feature importance and effect analysis (global and local)
+- Missing value indicators are handled and can be combined or separated in importance analysis
 
 ## Usage
 1. Prepare your data CSV(s) and a config YAML (see `example_config.yaml`).
@@ -185,3 +190,15 @@ If you use NumPy >=1.24, the test suite includes a monkey-patch for `np.bool` an
 ---
 
 For more, see `pipeline_usage_guide.md` and `run_locally.md`.
+
+from pipeline.pipeline import ClassificationPipeline
+
+### SHAP-based Feature Effect and Importance Analysis
+
+The pipeline uses [SHAP](https://shap.readthedocs.io/) for all feature effect and importance analysis:
+
+- **Global feature importance**: SHAP values are aggregated to show which features (including missing value indicators) most influence model predictions.
+- **Combined/separate missingness**: You can view the importance of a variable and its missingness indicator either combined or separately.
+- **Categorical support**: Categorical variables are handled appropriately in SHAP analysis.
+
+SHAP summary and dependence plots are available for interpretation. See the usage guide for examples.

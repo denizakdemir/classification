@@ -57,7 +57,7 @@ python run_from_config.py --config ./example_config.yaml
 ## 6. (Optional) Run the Pipeline in a Python Script or Notebook
 
 ```python
-from classification_pipeline import ClassificationPipeline
+from pipeline.pipeline import ClassificationPipeline
 import pandas as pd
 
 # Load your data
@@ -156,3 +156,7 @@ python run_from_config.py --config your_config.yaml
 
 ## Need Help?
 - Check the `
+
+- SHAP is used for all feature effect and importance analysis (no PDPs)
+- Missing value indicators can be combined or separated in importance analysis
+- Categorical variables are handled in SHAP analysis

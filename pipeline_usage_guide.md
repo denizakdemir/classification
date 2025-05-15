@@ -7,7 +7,6 @@ This guide explains how to use the comprehensive ML classification pipeline for 
 - **Missing Data Handling**: Automatically identifies and addresses both random and structural missingness in your data
 - **Probabilistic Estimates**: Provides probability scores for each class, not just final classifications
 - **Feature Importance Analysis**: Combines importance of original variables with their missingness patterns
-- **Partial Dependence Analysis**: Shows how each feature affects predictions while accounting for missingness
 - **Complete Prediction Pipeline**: Handles raw data with uncoded values and missing entries
 - **AWS SageMaker Integration**: Ready for deployment in AWS SageMaker environment with AutoGluon
 
@@ -24,7 +23,8 @@ This guide explains how to use the comprehensive ML classification pipeline for 
 
 This package contains the following key files:
 
-- `classification_pipeline.py`: The core pipeline code with all components
+- `pipeline/pipeline.py`: The main pipeline orchestration (modularized)
+- `pipeline/missing_data.py`, `pipeline/feature_engineering.py`, etc.: Modular pipeline components
 - `sagemaker_deployment.py`: Script to deploy the pipeline on AWS SageMaker (automatically generates the required entry point script for SageMaker)
 
 ## Using the Pipeline Locally
@@ -32,7 +32,7 @@ This package contains the following key files:
 For local testing and development, you can use the pipeline without SageMaker:
 
 ```python
-from classification_pipeline import ClassificationPipeline
+from pipeline.pipeline import ClassificationPipeline
 
 # Initialize pipeline
 pipeline = ClassificationPipeline(output_path='./model_output')
@@ -125,13 +125,15 @@ After training, you'll get feature importance that combines:
 
 The combined importance is stored in `feature_importance.csv` in your model output directory.
 
-### Partial Dependence Plots
+### SHAP-based Feature Effect and Importance Analysis
 
-PDP plots showing how each feature affects predictions are saved in the `pdp_plots` directory. These help visualize:
+The pipeline uses [SHAP](https://shap.readthedocs.io/) for all feature effect and importance analysis:
 
-- How numeric variables influence model output across their range
-- How categorical variables affect predictions for each category
-- How missingness in variables impacts predictions
+- **Global feature importance**: SHAP values are aggregated to show which features (including missing value indicators) most influence model predictions.
+- **Combined/separate missingness**: You can view the importance of a variable and its missingness indicator either combined or separately.
+- **Categorical support**: Categorical variables are handled appropriately in SHAP analysis.
+
+SHAP summary and dependence plots are available for interpretation. See below for example usage.
 
 ## Configuration Options
 

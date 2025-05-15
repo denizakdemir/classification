@@ -7,7 +7,7 @@ import shutil
 import numpy as np
 from pipeline.base_pipeline import BasePipeline
 from pipeline.minimal_modular_pipeline import MinimalPipeline
-from classification_pipeline import ClassificationPipeline
+from pipeline.pipeline import ClassificationPipeline
 import joblib
 
 def download_from_s3(s3_path, local_path):

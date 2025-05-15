@@ -10,6 +10,7 @@ import numpy as np
 import os
 import json
 from datetime import datetime
+from pipeline.pipeline import ClassificationPipeline
 
 # Set up SageMaker session
 sagemaker_session = sagemaker.Session()

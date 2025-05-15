@@ -1,9 +1,12 @@
 import pytest
 import numpy as np
 import pandas as pd
-from classification_pipeline import MissingDataHandler, FeatureEngineering, ClassificationPipeline
+from pipeline.missing_data import MissingDataHandler
+from pipeline.feature_engineering import FeatureEngineering
+from pipeline.pipeline import ClassificationPipeline
 from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
+from pipeline.interpretation import ModelFeatureImportance
 
 # Monkey-patch for SHAP/NumPy compatibility
 if not hasattr(np, 'bool'):
@@ -168,4 +171,34 @@ def test_explain_prediction():
         assert 'features' in exp
         assert isinstance(exp['shap_values'], list)
         assert isinstance(exp['features'], list)
-        assert len(exp['shap_values']) == len(exp['features']) 
+        assert len(exp['shap_values']) == len(exp['features'])
+
+def test_shap_feature_importance_and_effects():
+    # Small synthetic dataset
+    X, y = make_classification(n_samples=30, n_features=4, n_informative=2, random_state=42)
+    df = pd.DataFrame(X, columns=[f'f{i}' for i in range(4)])
+    df['target'] = y
+    train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
+    pipeline = ClassificationPipeline(output_path='./test_model_output')
+    pipeline.train(train_data=train_df, target_column='target', time_limit=5, presets='good_quality', hyperparameters={"RF": {}})
+    X_test = test_df.drop(columns=['target'])
+    mfi = ModelFeatureImportance(model_path='./test_model_output/model', missing_handler=pipeline.missing_handler)
+    mfi.calculate_shap_values(X_test)
+    # Test SHAP summary plot
+    fig1 = mfi.plot_shap_summary(X_test, max_display=4)
+    assert fig1 is not None
+    # Test SHAP importance (combined)
+    combined_importance = mfi.get_shap_importance(combine_missing=True)
+    assert 'feature' in combined_importance.columns
+    assert 'importance' in combined_importance.columns
+    # Test SHAP importance (separate)
+    separate_importance = mfi.get_shap_importance(combine_missing=False)
+    assert 'feature' in separate_importance.columns
+    assert 'importance' in separate_importance.columns
+    # Test SHAP importance bar plot
+    fig2 = mfi.plot_shap_importance(X_test, combine_missing=True, max_display=4)
+    assert fig2 is not None
+    # Test SHAP dependence plot for first feature
+    feature_name = combined_importance['feature'].iloc[0]
+    fig3 = mfi.plot_shap_dependence(X_test, feature=feature_name)
+    assert fig3 is not None 
